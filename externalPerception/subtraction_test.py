@@ -84,15 +84,23 @@ while True:
         cv2.rectangle(warped, (x,y), (x+w, y+h), (255, 255, 0), 2)
         (x,y,w,h) = contour_list[light]              
         cv2.rectangle(warped, (x,y), (x+w, y+h), (0, 0, 255), 2)
+    center_list = []
+    for con in contour_list:
+        (x,y,w,h) = con
+        center_list.append([int(x + w/2), int(y + h / 2)])
+    blank = np.zeros(warped.shape[:2])
+    for center in center_list:
+        (x,y) = center
+        blank = cv2.circle(blank,center, 5, (255,255,255), 2)
 
     # cv2.imshow("Subtractor", foreground_mask)
     # cv2.imshow("threshold", treshold)
     cv2.imshow("detection", warped)
-    #cv2.imshow("morphed", morphed)
+    cv2.imshow("draw", blank)
     #cv2.imshow("fused", delta_thresh)
     og_frame = cv2.resize(og_frame,(640,480))
-    cv2.imshow("raw", og_frame)
-    cv2.imshow("background", background)
+    # cv2.imshow("raw", og_frame)
+    # cv2.imshow("background", background)
     t1 = time.perf_counter() - t0
     print("computation time ", t1)
     if cv2.waitKey(1) & 0xff == 27:
