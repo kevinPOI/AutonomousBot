@@ -8,6 +8,7 @@ cap = cv2.VideoCapture(0)
 # DICT_6X6_250 is one example; you can choose a different one if you need to
 
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+
 parameters = cv2.aruco.DetectorParameters()
 # parameters.polygonalApproxAccuracyRate = 0.1
 parameters.maxErroneousBitsInBorderRate = 0.9
