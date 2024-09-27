@@ -4,6 +4,7 @@ import numpy as np
 import time
 # load image
 cap = cv2.VideoCapture(0)
+
 while(True):
     
     ret, frame = cap.read()
@@ -14,7 +15,7 @@ while(True):
     t0 = time.perf_counter()
     (corners, ids, rejected_corners) = stag.detectMarkers(gray, 21)
     print("detection took: ", time.perf_counter() - t0)
-# draw detected markers with ids
+    # draw detected markers with ids
 
     
     stag.drawDetectedMarkers(gray, corners, ids)
@@ -40,3 +41,6 @@ stag.drawDetectedMarkers(image, rejected_corners, border_color=(255, 0, 0))
 
 # save resulting image
 cv2.imwrite("example_result.jpg", image)
+
+# much better than aruco but sitll has issues with motion 
+# esp at high speeds 
