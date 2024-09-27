@@ -9,9 +9,6 @@ def order_points(pts):
 	# such that the first entry in the list is the top-left,
 	# the second entry is the top-right, the third is the
 	# bottom-right, and the fourth is the bottom-left
-	# rect = np.zeros((4, 2), dtype = "float32")
-	# left = []
-	# right = []
 	x_sort = pts[pts[:,0].argsort()]
 	if x_sort[0,1] < x_sort[1,1]:
 		tl = x_sort[0,:]
@@ -25,18 +22,14 @@ def order_points(pts):
 	else:
 		tr = x_sort[3,:]
 		br = x_sort[2,:]
-	# s = pts.sum(axis = 1)
-	# rect[0] = pts[np.argmin(s)]
-	# rect[2] = pts[np.argmax(s)]
 
-	# diff = np.diff(pts, axis = 1)
-	# rect[1] = pts[np.argmin(diff)]
-	# rect[3] = pts[np.argmax(diff)]
 	rect = np.asarray([tl, tr, br, bl], dtype=np.float32)
 	return rect
 
 def pad_image_y(image, y_pad):
-	padding = np.zeros([y_pad, image.shape[1], image.shape[2]], dtype=np.uint8)#row, column
+	padding = np.zeros([y_pad, 
+	
+	image.shape[1], image.shape[2]], dtype=np.uint8)#row, column
 	image = np.vstack([image, padding])
 	return image
 
