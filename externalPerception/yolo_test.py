@@ -10,7 +10,7 @@ camera = cv2.VideoCapture("nhrl_sample2.mp4")
 for i in range(1300):
     
     ret, og_frame = camera.read()
-    if(i > 5):
+    if(i > 5 and i % 4 == 0):
         t0 = time.perf_counter()
         results = model.predict(og_frame, show = True, verbose = False)
         print("infer time:", time.perf_counter() - t0)
