@@ -37,6 +37,7 @@ class Robot():
         self.pose = np.zeros(3)
         self.vel = 0
         self.omega = 0
+        self.update_time = time.time()
 def background_filter(background, new_frame, rate):
     background = (background * (1-rate) + new_frame*rate).astype(np.uint8)
     return background
@@ -104,8 +105,22 @@ def get_robots_pose(center_list, self_pose, us, opp):#return self_pose, opponent
     self_id = np.argmin(dists)
     self_pose_new = np.concatenate([center_list[np.argmin(dists)], self_pose[2:]])
     opponent_pose = np.concatenate([center_list[np.argmax(dists)], np.array([0])])
+
+    curr_time = time.time()
+    
+    dt_us = curr_time - us.update_time
+    us.vel = np.linalg.norm([self_pose_new - us.pose][:2])/dt_us
+    us.omega = np.linalg.norm([self_pose_new-us.pose][2:])/dt_us
+
+    dt_opp = curr_time - opp.update_time
+    opp.vel = np.linalg.norm([self_pose_new - opp.pose][:2])/dt_opp
+    opp.omega = np.linalg.norm([self_pose_new-opp.pose][2:])/dt_opp
+
     us.pose = self_pose_new
     opp.pose = opponent_pose
+    us.update_time = curr_time
+    opp.update_time = curr_time
+
 def draw_robots(warped_frame, us, opp):
     blank = np.zeros(warped_frame.shape)
     
