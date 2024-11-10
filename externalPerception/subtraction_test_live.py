@@ -3,14 +3,17 @@ import cv2
 import numpy as np
 import bevTransform
 import time
+import os
 t0 = time.perf_counter()
+initial_time = time.time()
 import matplotlib.pyplot as plt
 from undistort import undistort
+from recording import create_new_recording_folder
 print(time.perf_counter() - t0)
 ############################# SETTINGS #############################
 
 CAMERA = 0
-
+RECORD = True
 
 ####################################################################
 
@@ -39,6 +42,9 @@ class Robot():
         self.pose = np.zeros(3)
         self.vel = 0
         self.omega = 0
+def save_frame(frame, frame_counter, folder_path):
+    frame_filename = os.path.join(folder_path, f"frame_{frame_counter:05d}.png")
+    cv2.imwrite(frame_filename, frame)
 def background_filter(background, new_frame, rate):
     background = (background * (1-rate) + new_frame*rate).astype(np.uint8)
     return background
@@ -121,6 +127,10 @@ def draw_robots(warped_frame, us, opp):
     # cv2.imshow("threshold", treshold)
     cv2.imshow("detection", warped)
     cv2.imshow("draw", blank) 
+
+
+
+
 print(time.perf_counter() - t0)
 # KNN
 KNN_subtractor = cv2.createBackgroundSubtractorKNN(detectShadows = False) # detectShadows=True : exclude shadow areas from the objects you detected
@@ -149,6 +159,9 @@ if True:
 
 else:
     pts = np.array([[350,50], [0,680], [980,50], [1275,680]], dtype = "float32")#sample1
+if RECORD:
+    folder_name = create_new_recording_folder()
+
 
 # camera = cv2.VideoCapture("nhrl_sample1.mp4")
 #pts = np.array([[560,291], [137,396], [1009,337], [947,931]], dtype = "float32")#nhrl_sample1
@@ -163,8 +176,8 @@ gaussian_kernel = cv2.getGaussianKernel(3, 2)
 gaussian_kernel_2d = gaussian_kernel * gaussian_kernel.T
 us = Robot()
 opp = Robot()
-
-while True:
+timestamps = []
+for i in range(int(10e3)):
     t0 = time.perf_counter()
     ret, og_frame = camera.read()
     og_frame = undistort(og_frame, resolution=720)
@@ -187,6 +200,11 @@ while True:
     print("computation time ", t1)
     if cv2.waitKey(1) & 0xff == 27:
         break
-        
+    if RECORD:
+        save_frame(warped, i, folder_name)
+        timestamp = time.time() - initial_time
+        timestamps.append(timestamp)
+        if i % 10 == 0:
+            np.save(os.path.join(folder_name, f"timestamps"), np.array(timestamps))
 camera.release()
 cv2.destroyAllWindows()

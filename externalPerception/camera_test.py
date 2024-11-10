@@ -21,8 +21,6 @@ kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5));
 first = True
 gaussian_kernel = cv2.getGaussianKernel(3, 2)
 gaussian_kernel_2d = gaussian_kernel * gaussian_kernel.T
-us = Robot()
-opp = Robot()
 
 for i in range(100000):
     t = time.perf_counter()

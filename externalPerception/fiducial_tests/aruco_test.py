@@ -30,7 +30,7 @@ while True:
 
     if not ret:
         break
-
+    
     # Convert to grayscale (ArUco detection works better on a grayscale image)
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
