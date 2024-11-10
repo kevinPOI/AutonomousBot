@@ -1,4 +1,4 @@
-This is the repository for the autonomous robot project of team Carnegie Mellon Combat Robots. We aim to build an autonomous driving stack the controls the robot from a external perspective: essentially a robot that drive robots. 
+This is the repository for the autonomous robot project of Carnegie Mellon Combat Robotics. We aim to build an autonomous driving stack the controls the robot from external perception: essentially a robot that drive robots. 
 
 For the perception demo, clone the repo and go into folder "autonomousBot/externalPerception", and in command line, run "python subtraction_test.py"\
 When a image (first frame of the video) Click on the four corners of the arena to calibrate the birds-eye-view transformation parameter. Then close the window. Video with tracking should start\
