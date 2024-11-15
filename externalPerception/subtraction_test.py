@@ -5,12 +5,14 @@ import bevTransform
 import time
 import matplotlib.pyplot as plt
 from findTag import find_tags
-
+from ultralytics import YOLO
 ############################# SETTINGS #############################
 
-SAVEVIDEO = True
-INPUTNAME = "nhrl_sample2.mp4"
-
+SAVEVIDEO = False
+SAVESUBTRACTION = False
+INPUTNAME = "nhrl_tag2.mp4"
+HouseModel = YOLO("house-bot-seg.pt")
+TrackModel = YOLO("bev_subtraction_tracking.pt")
 
 ####################################################################
 
@@ -38,6 +40,11 @@ class Robot():
         self.vel = 0
         self.omega = 0
         self.update_time = time.time()
+def get_house_robot_seg(warped_image, model):
+    results = model.predict(warped_image, show = False, verbose = False)
+    mask_poly = results[0].masks.xy[0]
+    return mask_poly
+
 def background_filter(background, new_frame, rate):
     background = (background * (1-rate) + new_frame*rate).astype(np.uint8)
     return background
@@ -58,17 +65,29 @@ def pad_image_y(image, y_pad):
 	image = np.vstack([image, padding])
 	return image
 
-def track_robots(warped_frame, background, us, opp):
+def track_robots(warped_frame, background, us, opp, out_subtract = None):
     delta = cv2.cvtColor(cv2.subtract(background, warped_frame), cv2.COLOR_RGB2GRAY)
     delta_rgb = cv2.subtract(background, warped_frame)
     fused = fuse(delta, foreground_mask.copy())
+    house_robot_seg_poly = get_house_robot_seg(warped_frame, HouseModel)
     
+    house_robot_mask = np.zeros(warped_frame.shape[:2])
+    cv2.fillPoly(house_robot_mask, [house_robot_seg_poly.astype(np.int32)], 255)
+    delta[house_robot_mask == 255] = 0
+    TrackModel.predict(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB), show = True)
+    if SAVESUBTRACTION:
+        out_subtract.write(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB))
+    #out_subtract.write(warped_frame)
+    # masked_warped_frame = warped_frame.copy()
+    
+    # cv2.imshow("masked", masked_warped_frame)
     # cv2.imshow("fused", fused)
     # cv2.imshow("delta", delta)
-    # cv2.imshow("delta_rgb", delta_rgb)
+    cv2.imshow("delta_rgb", delta_rgb)
     #morphed = cv2.morphologyEx(delta_thresh, cv2.MORPH_OPEN, kernel)
-    morphed = cv2.threshold(delta, 70, 255,cv2.THRESH_BINARY)
+    morphed = cv2.threshold(delta, 100, 255,cv2.THRESH_BINARY)
     morphed = cv2.morphologyEx(fused, cv2.MORPH_OPEN, kernel)
+    
     cv2.imshow("morphed", morphed)
      # find contours 
     contours, hier = cv2.findContours(morphed,cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -227,6 +246,7 @@ us = Robot()
 opp = Robot()
 
 while True:
+
     t0 = time.perf_counter()
     ret, og_frame = camera.read()
     if(ret):
@@ -243,6 +263,10 @@ while True:
                 output_video = 'output_video.mp4'
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 out = cv2.VideoWriter(output_video, fourcc, 30, warped.shape[0:2])
+            if SAVESUBTRACTION:
+                output_video_subtract = 'subtraction_output_video.avi'
+                fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+                out_subtract = cv2.VideoWriter(output_video_subtract, fourcc, 30, warped.shape[0:2])
         # Every frame is used both for calculating the foreground mask and for updating the background. 
         else:
             background = background_filter(background, frame, 0.01)
@@ -269,4 +293,6 @@ while True:
 camera.release()
 if SAVEVIDEO:
     out.release()
+if SAVESUBTRACTION:
+    out_subtract.release()
 cv2.destroyAllWindows()
