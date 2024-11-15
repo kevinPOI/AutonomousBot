@@ -8,8 +8,8 @@ from findTag import find_tags
 
 ############################# SETTINGS #############################
 
-SAVEVIDEO = False
-INPUTNAME = "nhrl_tag2.mp4"
+SAVEVIDEO = True
+INPUTNAME = "nhrl_sample2.mp4"
 
 
 ####################################################################
@@ -60,8 +60,12 @@ def pad_image_y(image, y_pad):
 
 def track_robots(warped_frame, background, us, opp):
     delta = cv2.cvtColor(cv2.subtract(background, warped_frame), cv2.COLOR_RGB2GRAY)
+    delta_rgb = cv2.subtract(background, warped_frame)
     fused = fuse(delta, foreground_mask.copy())
-    cv2.imshow("fused", fused)
+    
+    # cv2.imshow("fused", fused)
+    # cv2.imshow("delta", delta)
+    # cv2.imshow("delta_rgb", delta_rgb)
     #morphed = cv2.morphologyEx(delta_thresh, cv2.MORPH_OPEN, kernel)
     morphed = cv2.threshold(delta, 70, 255,cv2.THRESH_BINARY)
     morphed = cv2.morphologyEx(fused, cv2.MORPH_OPEN, kernel)
