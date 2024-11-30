@@ -10,7 +10,7 @@ from ultralytics import YOLO
 
 SAVEVIDEO = False
 SAVESUBTRACTION = False
-INPUTNAME = "nhrl_tag2.mp4"
+INPUTNAME = "nhrl_sample2.mp4"
 HouseModel = YOLO("house-bot-seg.pt")
 TrackModel = YOLO("bev_subtraction_tracking.pt")
 
@@ -45,6 +45,15 @@ def get_house_robot_seg(warped_image, model):
     mask_poly = results[0].masks.xy[0]
     return mask_poly
 
+def track_robots_with_model(delta, model):
+    results = model.predict(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB),show = True, verbose = False )
+    boxes = results[0].boxes.xywh
+    if len(boxes) == 0:
+        return [],0
+    boxes[:,0] -= boxes[:,2]/2
+    boxes[:,1] -= boxes[:,3]/2
+    return boxes.cpu().numpy(), results[0].boxes.conf.cpu().numpy()
+
 def background_filter(background, new_frame, rate):
     background = (background * (1-rate) + new_frame*rate).astype(np.uint8)
     return background
@@ -74,37 +83,36 @@ def track_robots(warped_frame, background, us, opp, out_subtract = None):
     house_robot_mask = np.zeros(warped_frame.shape[:2])
     cv2.fillPoly(house_robot_mask, [house_robot_seg_poly.astype(np.int32)], 255)
     delta[house_robot_mask == 255] = 0
-    TrackModel.predict(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB), show = True)
-    if SAVESUBTRACTION:
-        out_subtract.write(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB))
+
+    # if SAVESUBTRACTION:
+    #     out_subtract.write(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB))
     #out_subtract.write(warped_frame)
     # masked_warped_frame = warped_frame.copy()
     
     # cv2.imshow("masked", masked_warped_frame)
     # cv2.imshow("fused", fused)
-    # cv2.imshow("delta", delta)
-    cv2.imshow("delta_rgb", delta_rgb)
+    cv2.imshow("delta", delta)
+    # cv2.imshow("delta_rgb", delta_rgb)
     #morphed = cv2.morphologyEx(delta_thresh, cv2.MORPH_OPEN, kernel)
-    morphed = cv2.threshold(delta, 100, 255,cv2.THRESH_BINARY)
-    morphed = cv2.morphologyEx(fused, cv2.MORPH_OPEN, kernel)
+    # morphed = cv2.threshold(delta, 100, 255,cv2.THRESH_BINARY)
+    # morphed = cv2.morphologyEx(fused, cv2.MORPH_OPEN, kernel)
     
-    cv2.imshow("morphed", morphed)
+    # cv2.imshow("morphed", morphed)
      # find contours 
-    contours, hier = cv2.findContours(morphed,cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
+    #contours, hier = cv2.findContours(morphed,cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, conf = track_robots_with_model(delta, TrackModel)
     # check every contour if are exceed certain value draw bounding boxes
     contour_list = []
-    contour_color = []
-    contours = sorted(contours, key=cv2.contourArea, reverse=True)
-    for contour in contours:
-        # if area exceed certain value then draw bounding boxes
-        if cv2.contourArea(contour) > 2500:
-            (x,y,w,h) = cv2.boundingRect(contour)
-            contour_list.append([x,y,w,h])
-            avg_color = np.average(warped[y:y+h, x:x+w], axis = (0,1))
-            contour_color.append(avg_color)
-            if len(contour_list) >= 2:
-                break
+    if len(contours) > 0:
+        contours = contours[conf > 0.5]
+        contours = contours[np.argsort(-(contours[:,2]*contours[:,3]))]
+        for contour in contours:
+            # if area exceed certain value then draw bounding boxes
+            (x,y,w,h) = contour.astype(int)
+            if (w * h < 25000):
+                contour_list.append([x,y,w,h])
+                if len(contour_list) >= 2:
+                    break
     plot_two = True
     if plot_two:
         if len(contour_list) >= 2:
@@ -137,6 +145,8 @@ def track_robots(warped_frame, background, us, opp, out_subtract = None):
     for con in contour_list:
         (x,y,w,h) = con
         center_list.append(np.array([int(x + w/2), int(y + h / 2)]))
+    if SAVESUBTRACTION:
+        out_subtract.write(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB))
     return warped, center_list
 def find_self_pose(frame):
     corners = find_tags(frame)
@@ -200,9 +210,9 @@ def draw_robots(warped_frame, us, opp):
     magnitude = us.vel + 20
     arrow_end = (us.pose[:2] + magnitude * np.array([np.cos(us.pose[2]), np.sin(us.pose[2])])).astype(int)
     if augment:
-        cv2.arrowedLine(warped,us.pose[:2].astype(int), arrow_end, (0,0,255), 2, tipLength= 0.3)
-        warped = cv2.circle(warped,us.pose[:2].astype(int), 5, (0,0,255), 2)
-        warped = cv2.circle(warped,opp.pose[:2].astype(int), 5, (255,0,0), 2)
+        cv2.arrowedLine(warped,us.pose[:2].astype(int), arrow_end, (255,255,0), 2, tipLength= 0.3)
+        warped = cv2.circle(warped,us.pose[:2].astype(int), 5, (255,255,0), 2)
+        warped = cv2.circle(warped,opp.pose[:2].astype(int), 5, (0,0,255), 2)
         cv2.imshow("detection", warped)
     else:
         cv2.imshow("detection", warped)
