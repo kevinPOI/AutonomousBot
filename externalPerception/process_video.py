@@ -8,8 +8,8 @@ from findTag import find_tags
 from ultralytics import YOLO
 ############################# SETTINGS #############################
 
-AUGMENT_MODE = "subtraction"
-INPUTNAME = "gitignore/nhrl_a1.mp4"
+PROCESS_MODE = "bev"
+INPUTNAME = "gitignore/nhrl_b0.mp4"
 HouseModel = YOLO("house-bot-seg.pt")
 TrackModel = YOLO("bev_subtraction_tracking.pt")
 
@@ -40,7 +40,9 @@ class Robot():
         self.omega = 0
         self.update_time = time.time()
 def get_house_robot_seg(warped_image, model):
-    results = model.predict(warped_image, show = False, verbose = False)
+    results = model.predict(warped_image, conf = 0.9, show = False, verbose = False)
+    if results[0].masks is None:
+        return None
     mask_poly = results[0].masks.xy[0]
     return mask_poly
 
@@ -76,14 +78,14 @@ def pad_image_y(image, y_pad):
 def track_robots(warped_frame, background, us, opp, out_subtract = None):
     delta = cv2.cvtColor(cv2.subtract(background, warped_frame), cv2.COLOR_RGB2GRAY)
     delta_rgb = cv2.subtract(background, warped_frame)
-    fused = fuse(delta, foreground_mask.copy())
     house_robot_seg_poly = get_house_robot_seg(warped_frame, HouseModel)
     
     house_robot_mask = np.zeros(warped_frame.shape[:2])
-    cv2.fillPoly(house_robot_mask, [house_robot_seg_poly.astype(np.int32)], 255)
+    if not (house_robot_seg_poly is None):
+        cv2.fillPoly(house_robot_mask, [house_robot_seg_poly.astype(np.int32)], 255)
     delta[house_robot_mask == 255] = 0
     cv2.imshow("delta", delta)
-    if AUGMENT_MODE == "subtraction":
+    if PROCESS_MODE == "subtraction":
         out_subtract.write(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB))
     center_list = []
     return warped, center_list
@@ -204,22 +206,31 @@ while True:
     if(ret):
         og_frame = bevTransform.pad_image_y(og_frame, 500)
         warped = bevTransform.four_point_transform(og_frame, pts)
-        foreground_mask = bg_subtractor.apply(warped)
-        #frame = cv2.filter2D(warped, -1, gaussian_kernel_2d)
+        # foreground_mask = bg_subtractor.apply(warped)
+        frame = cv2.filter2D(warped, -1, gaussian_kernel_2d)
+        
         frame = warped
         if first:
             first = False
             #background = frame
             background = cv2.filter2D(warped, -1, gaussian_kernel_2d)
-            if AUGMENT_MODE == "subtraction":
+            if PROCESS_MODE == "subtraction":
                 output_video_subtract = 'subtraction_output_video.mp4'
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 out_subtract = cv2.VideoWriter(output_video_subtract, fourcc, 30, warped.shape[0:2])
+            if PROCESS_MODE == "bev":
+                output_video_bev = 'bev_output_video.mp4'
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out_bev = cv2.VideoWriter(output_video_bev, fourcc, 30, warped.shape[0:2])
         # Every frame is used both for calculating the foreground mask and for updating the background. 
         else:
             background = background_filter(background, frame, 0.01)
-        if AUGMENT_MODE == "subtraction":
+        if PROCESS_MODE == "bev":
+            out_bev.write(warped)
+        if PROCESS_MODE == "subtraction":
             warped_boxed, center_list = track_robots(frame, background, us, opp, out_subtract=out_subtract)
+        elif PROCESS_MODE == "bev":
+            warped_boxed, center_list = track_robots(frame, background, us, opp)
         else:
             warped_boxed, center_list = track_robots(frame, background, us, opp)
         # self_pose = find_self_pose(warped)
@@ -240,6 +251,6 @@ while True:
         break
         
 camera.release()
-if AUGMENT_MODE == "subtraction":
+if PROCESS_MODE == "subtraction":
     out_subtract.release()
 cv2.destroyAllWindows()

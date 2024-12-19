@@ -10,9 +10,11 @@ from ultralytics import YOLO
 
 SAVEVIDEO = False
 SAVESUBTRACTION = False
-INPUTNAME = "nhrl_sample2.mp4"
+#INPUTNAME = "gitignore/nhrl_a2.mp4"
+INPUTNAME = "nhrl_tag2.mp4"
 HouseModel = YOLO("house-bot-seg.pt")
-TrackModel = YOLO("bev_subtraction_tracking.pt")
+TrackModel = YOLO("bev_subtraction_tracking2.pt")
+skip_till_frame = 80 #skip the first N frame where match haven't begin
 
 ####################################################################
 
@@ -46,7 +48,7 @@ def get_house_robot_seg(warped_image, model):
     return mask_poly
 
 def track_robots_with_model(delta, model):
-    results = model.predict(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB),show = True, verbose = False )
+    results = model.predict(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB),show = False, verbose = False )
     boxes = results[0].boxes.xywh
     if len(boxes) == 0:
         return [],0
@@ -164,14 +166,23 @@ def find_self_pose(frame):
 def dummy_ident():
     return np.array([0,0, -1.57])
 
-def get_robots_pose(center_list, self_pose, us, opp):#return self_pose, opponent_pose given a list of tracking centers (maximum two) and 
-    #both 
+def get_robots_pose(center_list, self_pose, us, opp):
+    '''
+    Arguments:
+    center_list: list of bonding box centers of robots, maxmum two
+    self_pose: self pose obtained from tag. None if tag not detected
+    us, opp: robot objects
+
+    The function identifies which bonding box corresponds to us and which corresponds to opponent. Theb pose info for both robots
+    '''
     if self_pose is not None:
         use_tag_pose = True
     else:
+        #if tag not detected, use last pose of our robot
         use_tag_pose = False
         self_pose = us.pose
 
+    #find distance between self_pose from tag and bonding box position
     dists = []
     if len(center_list) == 0:
         return
@@ -223,7 +234,7 @@ def draw_robots(warped_frame, us, opp):
         cv2.imshow("draw", blank) 
 
 # KNN
-KNN_subtractor = cv2.createBackgroundSubtractorKNN(detectShadows = False) # detectShadows=True : exclude shadow areas from the objects you detected
+KNN_subtractor = cv2.createBackgroundSubtractorKNN(detectShadows = True) # detectShadows=True : exclude shadow areas from the objects you detected
 
 # MOG2
 MOG2_subtractor = cv2.createBackgroundSubtractorMOG2(detectShadows = False) # exclude shadow areas from the objects you detected
@@ -233,18 +244,16 @@ bg_subtractor=KNN_subtractor
 
 #camera = cv2.VideoCapture("sample1.mp4")
 camera = cv2.VideoCapture(INPUTNAME)
-if True:
-    while True:
-        arena = Arena()
-        arena.get_crop(camera)
-        if len(arena.corners) == 4:
-            pts = np.array(arena.corners)
-            break
-        else:
-            print("not 4 corners are selected")
-            arena.corners = []
-else:
-    pts = np.array([[350,50], [0,680], [980,50], [1275,680]], dtype = "float32")#sample1
+
+while True:
+    arena = Arena()
+    arena.get_crop(camera)
+    if len(arena.corners) == 4:
+        pts = np.array(arena.corners)
+        break
+    else:
+        print("not 4 corners are selected")
+        arena.corners = []
 
 
 
@@ -254,9 +263,9 @@ gaussian_kernel = cv2.getGaussianKernel(3, 2)
 gaussian_kernel_2d = gaussian_kernel * gaussian_kernel.T
 us = Robot()
 opp = Robot()
-
+frame_count = 0
 while True:
-
+    
     t0 = time.perf_counter()
     ret, og_frame = camera.read()
     if(ret):
@@ -279,7 +288,10 @@ while True:
                 out_subtract = cv2.VideoWriter(output_video_subtract, fourcc, 30, warped.shape[0:2])
         # Every frame is used both for calculating the foreground mask and for updating the background. 
         else:
+            frame_count += 1
             background = background_filter(background, frame, 0.01)
+        if frame_count < skip_till_frame:
+            continue 
         if SAVEVIDEO:
             out.write(warped)
         warped_boxed, center_list = track_robots(frame, background, us, opp)
