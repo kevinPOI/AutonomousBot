@@ -6,16 +6,17 @@ import time
 import matplotlib.pyplot as plt
 from findTag import find_tags
 from ultralytics import YOLO
+from kalman import KalmanFilter
 ############################# SETTINGS #############################
 
 SAVEVIDEO = False
 SAVESUBTRACTION = False
-#INPUTNAME = "gitignore/nhrl_a2.mp4"
-INPUTNAME = "nhrl_tag2.mp4"
+INPUTNAME = "gitignore/nhrl_a2.mp4"
+#INPUTNAME = "nhrl_tag2.mp4"
 HouseModel = YOLO("house-bot-seg.pt")
 TrackModel = YOLO("bev_subtraction_tracking2.pt")
-skip_till_frame = 80 #skip the first N frame where match haven't begin
-
+skip_till_frame = 280 #skip the first N frame where match haven't begin
+DT = 0.033 #30 fps
 ####################################################################
 
 class Arena():
@@ -37,18 +38,19 @@ class Arena():
         fig.canvas.mpl_connect('button_press_event', self.onclick)
         plt.show()
 class Robot():
-    def __init__(self) -> None:
+    def __init__(self, filter = None) -> None:
         self.pose = np.zeros(3)
         self.vel = 0
         self.omega = 0
         self.update_time = time.time()
+        self.filter = filter
 def get_house_robot_seg(warped_image, model):
     results = model.predict(warped_image, show = False, verbose = False)
     mask_poly = results[0].masks.xy[0]
     return mask_poly
 
 def track_robots_with_model(delta, model):
-    results = model.predict(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB),show = False, verbose = False )
+    results = model.predict(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB),show = True, verbose = False )
     boxes = results[0].boxes.xywh
     if len(boxes) == 0:
         return [],0
@@ -106,8 +108,9 @@ def track_robots(warped_frame, background, us, opp, out_subtract = None):
     # check every contour if are exceed certain value draw bounding boxes
     contour_list = []
     if len(contours) > 0:
-        contours = contours[conf > 0.5]
-        contours = contours[np.argsort(-(contours[:,2]*contours[:,3]))]
+        contours = contours[conf > 0.2]
+        coef_areas = (contours[:,2]*contours[:,3]) * (2 + conf)
+        contours = contours[np.argsort(-coef_areas)]
         for contour in contours:
             # if area exceed certain value then draw bounding boxes
             (x,y,w,h) = contour.astype(int)
@@ -191,7 +194,7 @@ def get_robots_pose(center_list, self_pose, us, opp):
         dists.append(dist)
     self_id = np.argmin(dists)
     if use_tag_pose:
-        self_pose_new = self_pose
+        self_pose_new = np.concatenate([center_list[np.argmin(dists)], self_pose[2:]])
     else:
         self_pose_new = np.concatenate([center_list[np.argmin(dists)], self_pose[2:]])
     opponent_pose = np.concatenate([center_list[np.argmax(dists)], np.array([0])])
@@ -206,10 +209,16 @@ def get_robots_pose(center_list, self_pose, us, opp):
     opp.vel = np.linalg.norm([self_pose_new - opp.pose][:2])/dt_opp
     opp.omega = np.linalg.norm([self_pose_new-opp.pose][2:])/dt_opp
 
-    us.pose = self_pose_new
-    opp.pose = opponent_pose
+    us.filter.predict(DT)
+    us.filter.update(self_pose_new)
+    us.pose = us.filter.get_state()[0:3]
     us.update_time = curr_time
+
+    opp.filter.predict(DT)
+    opp.filter.update(opponent_pose)
+    opp.pose = opp.filter.get_state()[0:3]
     opp.update_time = curr_time
+
 
 def draw_robots(warped_frame, us, opp):
     augment = True
@@ -221,7 +230,7 @@ def draw_robots(warped_frame, us, opp):
     magnitude = us.vel + 20
     arrow_end = (us.pose[:2] + magnitude * np.array([np.cos(us.pose[2]), np.sin(us.pose[2])])).astype(int)
     if augment:
-        cv2.arrowedLine(warped,us.pose[:2].astype(int), arrow_end, (255,255,0), 2, tipLength= 0.3)
+        #cv2.arrowedLine(warped,us.pose[:2].astype(int), arrow_end, (255,255,0), 2, tipLength= 0.3)
         warped = cv2.circle(warped,us.pose[:2].astype(int), 5, (255,255,0), 2)
         warped = cv2.circle(warped,opp.pose[:2].astype(int), 5, (0,0,255), 2)
         cv2.imshow("detection", warped)
@@ -232,89 +241,90 @@ def draw_robots(warped_frame, us, opp):
     # cv2.imshow("threshold", treshold)
     
         cv2.imshow("draw", blank) 
+if __name__ == "__main__":
+    KNN_subtractor = cv2.createBackgroundSubtractorKNN(detectShadows = True) # detectShadows=True : exclude shadow areas from the objects you detected
+    bg_subtractor=KNN_subtractor
 
-# KNN
-KNN_subtractor = cv2.createBackgroundSubtractorKNN(detectShadows = True) # detectShadows=True : exclude shadow areas from the objects you detected
+    #camera = cv2.VideoCapture("sample1.mp4")
+    camera = cv2.VideoCapture(INPUTNAME)
 
-# MOG2
-MOG2_subtractor = cv2.createBackgroundSubtractorMOG2(detectShadows = False) # exclude shadow areas from the objects you detected
-
-# choose your subtractor
-bg_subtractor=KNN_subtractor
-
-#camera = cv2.VideoCapture("sample1.mp4")
-camera = cv2.VideoCapture(INPUTNAME)
-
-while True:
-    arena = Arena()
-    arena.get_crop(camera)
-    if len(arena.corners) == 4:
-        pts = np.array(arena.corners)
-        break
-    else:
-        print("not 4 corners are selected")
-        arena.corners = []
-
-
-
-kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5));
-first = True
-gaussian_kernel = cv2.getGaussianKernel(3, 2)
-gaussian_kernel_2d = gaussian_kernel * gaussian_kernel.T
-us = Robot()
-opp = Robot()
-frame_count = 0
-while True:
-    
-    t0 = time.perf_counter()
-    ret, og_frame = camera.read()
-    if(ret):
-        og_frame = bevTransform.pad_image_y(og_frame, 500)
-        warped = bevTransform.four_point_transform(og_frame, pts)
-        foreground_mask = bg_subtractor.apply(warped)
-        #frame = cv2.filter2D(warped, -1, gaussian_kernel_2d)
-        frame = warped
-        if first:
-            first = False
-            #background = frame
-            background = cv2.filter2D(warped, -1, gaussian_kernel_2d)
-            if SAVEVIDEO:
-                output_video = 'output_video.mp4'
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(output_video, fourcc, 30, warped.shape[0:2])
-            if SAVESUBTRACTION:
-                output_video_subtract = 'subtraction_output_video.avi'
-                fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-                out_subtract = cv2.VideoWriter(output_video_subtract, fourcc, 30, warped.shape[0:2])
-        # Every frame is used both for calculating the foreground mask and for updating the background. 
-        else:
-            frame_count += 1
-            background = background_filter(background, frame, 0.01)
-        if frame_count < skip_till_frame:
-            continue 
-        if SAVEVIDEO:
-            out.write(warped)
-        warped_boxed, center_list = track_robots(frame, background, us, opp)
-        self_pose = find_self_pose(warped)
-        # if self_pose_t is None:
-        #     self_pose = us.pose #if no tag detected, use last bonding box position
-        # else:
-        #     self_pose = self_pose_t
-        
-        get_robots_pose(center_list, self_pose, us, opp)
-        draw_robots(warped_boxed, us, opp)
-        
-        
-        t1 = time.perf_counter() - t0
-        print("computation time ", t1)
-        if cv2.waitKey(1) & 0xff == 27:
+    while True:
+        arena = Arena()
+        arena.get_crop(camera)
+        if len(arena.corners) == 4:
+            pts = np.array(arena.corners)
             break
-    else:
-        break
+        else:
+            print("not 4 corners are selected")
+            arena.corners = []
+
+
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5));
+    first = True
+    gaussian_kernel = cv2.getGaussianKernel(3, 2)
+    gaussian_kernel_2d = gaussian_kernel * gaussian_kernel.T
+
+
+    frame_count = 0
+    initial_state = [0, 0, 0, 0, 0, 0]
+    process_noise = np.diag([0.01, 0.01, 0.01, 0.1, 0.1, 0.1])
+    measurement_noise = np.diag([0.05, 0.05, 0.05])
+    kf_us = KalmanFilter(initial_state, process_noise, measurement_noise)
+    us = Robot(filter=kf_us)
+    kf_opp = KalmanFilter(initial_state, process_noise, measurement_noise)
+    opp = Robot(kf_opp)
+    while True:
         
-camera.release()
-if SAVEVIDEO:
-    out.release()
-if SAVESUBTRACTION:
-    out_subtract.release()
-cv2.destroyAllWindows()
+        t0 = time.perf_counter()
+        ret, og_frame = camera.read()
+        if(ret):
+            og_frame = bevTransform.pad_image_y(og_frame, 500)
+            warped = bevTransform.four_point_transform(og_frame, pts)
+            foreground_mask = bg_subtractor.apply(warped)
+            #frame = cv2.filter2D(warped, -1, gaussian_kernel_2d)
+            frame = warped
+            if first:
+                first = False
+                #background = frame
+                background = cv2.filter2D(warped, -1, gaussian_kernel_2d)
+                if SAVEVIDEO:
+                    output_video = 'output_video.mp4'
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    out = cv2.VideoWriter(output_video, fourcc, 30, warped.shape[0:2])
+                if SAVESUBTRACTION:
+                    output_video_subtract = 'subtraction_output_video.avi'
+                    fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+                    out_subtract = cv2.VideoWriter(output_video_subtract, fourcc, 30, warped.shape[0:2])
+            # Every frame is used both for calculating the foreground mask and for updating the background. 
+            else:
+                frame_count += 1
+                background = background_filter(background, frame, 0.01)
+            if frame_count < skip_till_frame:
+                continue 
+            if SAVEVIDEO:
+                out.write(warped)
+            warped_boxed, center_list = track_robots(frame, background, us, opp)
+            self_pose = find_self_pose(warped)
+            # if self_pose_t is None:
+            #     self_pose = us.pose #if no tag detected, use last bonding box position
+            # else:
+            #     self_pose = self_pose_t
+            
+            get_robots_pose(center_list, self_pose, us, opp)
+            draw_robots(warped_boxed, us, opp)
+            
+            
+            t1 = time.perf_counter() - t0
+            print("computation time ", t1)
+            if cv2.waitKey(1) & 0xff == 27:
+                break
+        else:
+            break
+            
+    camera.release()
+    if SAVEVIDEO:
+        out.release()
+    if SAVESUBTRACTION:
+        out_subtract.release()
+    cv2.destroyAllWindows()
