@@ -7,15 +7,16 @@ import matplotlib.pyplot as plt
 from findTag import find_tags
 from ultralytics import YOLO
 from kalman import KalmanFilter
+from controller import Controller
 ############################# SETTINGS #############################
 
 SAVEVIDEO = False
 SAVESUBTRACTION = False
-INPUTNAME = "gitignore/nhrl_a2.mp4"
-#INPUTNAME = "nhrl_tag2.mp4"
+#INPUTNAME = "gitignore/nhrl_a2.mp4"
+INPUTNAME = "nhrl_tag2.mp4"
 HouseModel = YOLO("house-bot-seg.pt")
 TrackModel = YOLO("bev_subtraction_tracking2.pt")
-skip_till_frame = 280 #skip the first N frame where match haven't begin
+skip_till_frame = 0 #skip the first N frame where match haven't begin
 DT = 0.033 #30 fps
 ####################################################################
 
@@ -50,7 +51,7 @@ def get_house_robot_seg(warped_image, model):
     return mask_poly
 
 def track_robots_with_model(delta, model):
-    results = model.predict(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB),show = True, verbose = False )
+    results = model.predict(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB),show = False, verbose = False )
     boxes = results[0].boxes.xywh
     if len(boxes) == 0:
         return [],0
@@ -138,14 +139,6 @@ def track_robots(warped_frame, background, us, opp, out_subtract = None):
         else:
             pass
 
-    # contour_color = np.asarray(contour_color)
-    # if len(contour_color.shape) == 2:
-    #     blue = np.argmin(contour_color[:,0] / np.sum(contour_color, axis = 1))
-    #     light = np.argmax(contour_color[:,0]/ np.sum(contour_color, axis = 1))
-    #     (x,y,w,h) = contour_list[blue]              
-    #     cv2.rectangle(warped, (x,y), (x+w, y+h), (255, 255, 0), 2)
-    #     (x,y,w,h) = contour_list[light]              
-    #     cv2.rectangle(warped, (x,y), (x+w, y+h), (0, 0, 255), 2)
     center_list = []
     for con in contour_list:
         (x,y,w,h) = con
@@ -230,7 +223,7 @@ def draw_robots(warped_frame, us, opp):
     magnitude = us.vel + 20
     arrow_end = (us.pose[:2] + magnitude * np.array([np.cos(us.pose[2]), np.sin(us.pose[2])])).astype(int)
     if augment:
-        #cv2.arrowedLine(warped,us.pose[:2].astype(int), arrow_end, (255,255,0), 2, tipLength= 0.3)
+        cv2.arrowedLine(warped,us.pose[:2].astype(int), arrow_end, (255,255,0), 2, tipLength= 0.3)
         warped = cv2.circle(warped,us.pose[:2].astype(int), 5, (255,255,0), 2)
         warped = cv2.circle(warped,opp.pose[:2].astype(int), 5, (0,0,255), 2)
         cv2.imshow("detection", warped)
@@ -241,6 +234,9 @@ def draw_robots(warped_frame, us, opp):
     # cv2.imshow("threshold", treshold)
     
         cv2.imshow("draw", blank) 
+
+def draw_controls():
+    pass
 if __name__ == "__main__":
     KNN_subtractor = cv2.createBackgroundSubtractorKNN(detectShadows = True) # detectShadows=True : exclude shadow areas from the objects you detected
     bg_subtractor=KNN_subtractor
@@ -274,6 +270,7 @@ if __name__ == "__main__":
     us = Robot(filter=kf_us)
     kf_opp = KalmanFilter(initial_state, process_noise, measurement_noise)
     opp = Robot(kf_opp)
+    controller = Controller(us, opp)
     while True:
         
         t0 = time.perf_counter()
@@ -288,6 +285,7 @@ if __name__ == "__main__":
                 first = False
                 #background = frame
                 background = cv2.filter2D(warped, -1, gaussian_kernel_2d)
+                controller.frame_w, controller.frame_h = warped.shape[:2]
                 if SAVEVIDEO:
                     output_video = 'output_video.mp4'
                     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -296,6 +294,7 @@ if __name__ == "__main__":
                     output_video_subtract = 'subtraction_output_video.avi'
                     fourcc = cv2.VideoWriter_fourcc(*'MJPG')
                     out_subtract = cv2.VideoWriter(output_video_subtract, fourcc, 30, warped.shape[0:2])
+
             # Every frame is used both for calculating the foreground mask and for updating the background. 
             else:
                 frame_count += 1
@@ -312,6 +311,8 @@ if __name__ == "__main__":
             #     self_pose = self_pose_t
             
             get_robots_pose(center_list, self_pose, us, opp)
+            controls = controller.get_controls()
+            print("controls: ", controls)
             draw_robots(warped_boxed, us, opp)
             
             
