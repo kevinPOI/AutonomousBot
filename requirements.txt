@@ -3,3 +3,4 @@ stag-python
 numpy==1.26.4
 TIME-python
 matplotlib
+ultralytics
