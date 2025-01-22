@@ -14,9 +14,10 @@ For the perception demo on saved videos, clone the repository and run:
 ```
 pip install -r requirements.txt
 ```
+(If you wish to run the models on gpu (highly recommended unless you are just checking out), you also need to install pytorch with cuda support if you haven't done so.)\
 Then go into folder "autonomousBot/externalPerception" and run: 
 ```
-python subtraction_test.py
+python main.py
 ```
 \
 When an image (first frame of the video) appares, click on the four corners of the arena to calibrate the birds's-eye-view transformation parameters. Then close the window. Video with tracking should start playing. \

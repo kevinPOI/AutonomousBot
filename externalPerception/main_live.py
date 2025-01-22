@@ -26,8 +26,8 @@ SAVEVIDEO = False
 SAVESUBTRACTION = False
 undistort_camera = False
 skip_till_frame = 0 #skip the first N frame where match haven't begin
-HouseModel = YOLO("house-bot-seg.pt")
-TrackModel = YOLO("bev_subtraction_tracking2.pt")
+HouseModel = YOLO("models/house-bot-seg.pt")
+TrackModel = YOLO("models/bev_subtraction_tracking2.pt")
 DT = 0.033 #30 fps
 sim_target = np.array([200,200,0])
 ####################################################################
@@ -43,7 +43,6 @@ if __name__ == "__main__":
     camera = cv2.VideoCapture(CAMERA)
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-    #camera = cv2.VideoCapture("sample1.mp4")
 
     while True:
         arena = Arena()
@@ -54,26 +53,6 @@ if __name__ == "__main__":
         else:
             print("not 4 corners are selected")
             arena.corners = []
-
-
-    #camera = cv2.VideoCapture("sample1.mp4")
-    # camera = cv2.VideoCapture(CAMERA)
-    # camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    # camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-    # if True:
-    #     while True:
-    #         arena = Arena()
-    #         arena.get_crop(camera)
-    #         if len(arena.corners) == 4:
-    #             pts = np.array(arena.corners)
-    #             break
-    #         else:
-    #             print("not 4 corners are selected")
-    #             arena.corners = []
-            
-
-    else:
-        pts = np.array([[350,50], [0,680], [980,50], [1275,680]], dtype = "float32")#sample1
     if RECORD:
         folder_name = create_new_recording_folder()
 
@@ -129,11 +108,7 @@ if __name__ == "__main__":
                 out.write(warped)
             warped_boxed, center_list = track_robots(frame, background, us, opp)
             self_pose = find_self_pose(warped)
-            # if self_pose_t is None:
-            #     self_pose = us.pose #if no tag detected, use last bonding box position
-            # else:
-            #     self_pose = self_pose_t
-            
+
             get_robots_pose(center_list, self_pose, us, opp)
             opp.pose = sim_target
             controls = controller.get_controls()
