@@ -18,6 +18,7 @@ HouseModel = YOLO("house-bot-seg.pt")
 TrackModel = YOLO("bev_subtraction_tracking2.pt")
 skip_till_frame = 0 #skip the first N frame where match haven't begin
 DT = 0.033 #30 fps
+SINGLE_BOT = True
 ####################################################################
 
 class Arena():
@@ -47,6 +48,8 @@ class Robot():
         self.filter = filter
 def get_house_robot_seg(warped_image, model):
     results = model.predict(warped_image, show = False, verbose = False)
+    if results[0].masks == None:
+        return None
     mask_poly = results[0].masks.xy[0]
     return mask_poly
 
@@ -82,11 +85,12 @@ def pad_image_y(image, y_pad):
 def track_robots(warped_frame, background, us, opp, out_subtract = None):
     delta = cv2.cvtColor(cv2.subtract(background, warped_frame), cv2.COLOR_RGB2GRAY)
     delta_rgb = cv2.subtract(background, warped_frame)
-    fused = fuse(delta, foreground_mask.copy())
+
     house_robot_seg_poly = get_house_robot_seg(warped_frame, HouseModel)
     
     house_robot_mask = np.zeros(warped_frame.shape[:2])
-    cv2.fillPoly(house_robot_mask, [house_robot_seg_poly.astype(np.int32)], 255)
+    if not( house_robot_seg_poly is None):
+        cv2.fillPoly(house_robot_mask, [house_robot_seg_poly.astype(np.int32)], 255)
     delta[house_robot_mask == 255] = 0
 
     # if SAVESUBTRACTION:
@@ -128,14 +132,14 @@ def track_robots(warped_frame, background, us, opp, out_subtract = None):
             (x0,y0,w0,h0) = contour_list[0]
             (x1,y1,w1,h1) = contour_list[1]
             if d0 < d1:
-                cv2.rectangle(warped, (x0,y0), (x0+w0, y0+h0), (255, 255, 0), 2)
-                cv2.rectangle(warped, (x1,y1), (x1+w1, y1+h1), (0,0,255), 2)
+                cv2.rectangle(warped_frame, (x0,y0), (x0+w0, y0+h0), (255, 255, 0), 2)
+                cv2.rectangle(warped_frame, (x1,y1), (x1+w1, y1+h1), (0,0,255), 2)
             else:
-                cv2.rectangle(warped, (x0,y0), (x0+w0, y0+h0), (0,0,255), 2)
-                cv2.rectangle(warped, (x1,y1), (x1+w1, y1+h1), (255,255,0), 2)
+                cv2.rectangle(warped_frame, (x0,y0), (x0+w0, y0+h0), (0,0,255), 2)
+                cv2.rectangle(warped_frame, (x1,y1), (x1+w1, y1+h1), (255,255,0), 2)
         elif len(contour_list) == 1:
             (x0,y0,w0,h0) = contour_list[0]
-            cv2.rectangle(warped, (x0,y0), (x0+w0, y0+h0), (255, 255, 0), 2)
+            cv2.rectangle(warped_frame, (x0,y0), (x0+w0, y0+h0), (255, 255, 0), 2)
         else:
             pass
 
@@ -145,7 +149,7 @@ def track_robots(warped_frame, background, us, opp, out_subtract = None):
         center_list.append(np.array([int(x + w/2), int(y + h / 2)]))
     if SAVESUBTRACTION:
         out_subtract.write(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB))
-    return warped, center_list
+    return warped_frame, center_list
 def find_self_pose(frame):
     corners = find_tags(frame)
     print("corners: ", corners)
@@ -155,7 +159,7 @@ def find_self_pose(frame):
         print("warning: multiple tags found")
     corner = corners[0][0]
     pos = (corner[0,:] + corner[3,:]) / 2
-    diffs = corner[1,:] - corner[0,:] #tag inverted on robot
+    diffs = corner[0,:] - corner[1,:] #tag inverted on robot
     theta = np.arctan2(diffs[1], diffs[0])
     return np.append(pos, theta)
 
@@ -181,16 +185,25 @@ def get_robots_pose(center_list, self_pose, us, opp):
     #find distance between self_pose from tag and bonding box position
     dists = []
     if len(center_list) == 0:
-        return
-    for c in center_list:
-        dist = np.linalg.norm(c-  self_pose[:2])
-        dists.append(dist)
-    self_id = np.argmin(dists)
-    if use_tag_pose:
-        self_pose_new = np.concatenate([center_list[np.argmin(dists)], self_pose[2:]])
+        if use_tag_pose:
+            self_pose_new = self_pose
+            opponent_pose = opp.pose
+        else:
+            self_pose_new = us.pose
+            opponent_pose = opp.pose
     else:
-        self_pose_new = np.concatenate([center_list[np.argmin(dists)], self_pose[2:]])
-    opponent_pose = np.concatenate([center_list[np.argmax(dists)], np.array([0])])
+        if use_tag_pose:
+            self_pose_new = self_pose
+        for c in center_list:
+            dist = np.linalg.norm(c-  self_pose[:2])
+            dists.append(dist)
+        # self_id = np.argmin(dists)
+        if use_tag_pose:
+            self_pose_new = self_pose
+            print("self_pose is: ", self_pose_new)
+        else:
+            self_pose_new = np.concatenate([center_list[np.argmin(dists)], self_pose[2:]])
+        opponent_pose = np.concatenate([center_list[np.argmax(dists)], np.array([0])])
 
     curr_time = time.time()
     
@@ -206,6 +219,7 @@ def get_robots_pose(center_list, self_pose, us, opp):
     us.filter.update(self_pose_new)
     us.pose = us.filter.get_state()[0:3]
     us.update_time = curr_time
+    print("us pose is: ", us.pose)
 
     opp.filter.predict(DT)
     opp.filter.update(opponent_pose)
@@ -220,7 +234,7 @@ def draw_robots(warped_frame, us, opp):
     blank = cv2.circle(blank,us.pose[:2].astype(int), 5, (0,0,255), 2)
     blank = cv2.circle(blank,opp.pose[:2].astype(int), 5, (255,0,0), 2)
 
-    magnitude = us.vel + 20
+    magnitude = 20
     arrow_end = (us.pose[:2] + magnitude * np.array([np.cos(us.pose[2]), np.sin(us.pose[2])])).astype(int)
     if augment:
         cv2.arrowedLine(warped,us.pose[:2].astype(int), arrow_end, (255,255,0), 2, tipLength= 0.3)
@@ -311,6 +325,7 @@ if __name__ == "__main__":
             #     self_pose = self_pose_t
             
             get_robots_pose(center_list, self_pose, us, opp)
+            
             controls = controller.get_controls()
             print("controls: ", controls)
             draw_robots(warped_boxed, us, opp)

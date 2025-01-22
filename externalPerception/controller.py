@@ -33,7 +33,7 @@ class Controller:
         return np.array([thro, steer])
         pass
     def near_walls(self):
-        stride = 100
+        stride = 30
         x,y,th = self.us.pose
         near_left_or_right = x <= stride or x >= self.frame_w - stride
         near_top_or_bottom = y <= stride or y >= self.frame_h - stride
@@ -59,7 +59,7 @@ class Controller:
             steer = cap_input(-delta_angle / 2, 0.3)
         else:
             thro = 0
-            steer = cap_input(-delta_angle / 2, 0.6)
+            steer = cap_input(-delta_angle / 2, 0.3)
         return np.array([thro, steer])
     
     def move_towards_opponent(self):
