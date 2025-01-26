@@ -1,4 +1,4 @@
 Temporary notes to run radio module on linux:
 1. (possibly needed): $ sudo apt remove brltty, $ sudo useradd yourusernamehere dialout
 2. sudo path/to/anaconda/bin/python file: if using anaconda
-3. 
+3. may need chmod 666 the usb device?

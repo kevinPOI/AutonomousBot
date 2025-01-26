@@ -150,16 +150,19 @@ def track_robots(warped_frame, background, us, opp, out_subtract = None):
     if SAVESUBTRACTION:
         out_subtract.write(cv2.cvtColor(delta, cv2.COLOR_GRAY2RGB))
     return warped_frame, center_list
-def find_self_pose(frame):
-    corners = find_tags(frame)
+def find_self_pose(frame, corners):
+    #corners = find_tags(frame)
+    if corners is None:
+        print("\n tag lost \n")
+        return None
     print("corners: ", corners)
     if len(corners) == 0:
         return None
     if len(corners) > 1:
         print("warning: multiple tags found")
-    corner = corners[0][0]
-    pos = (corner[0,:] + corner[3,:]) / 2
-    diffs = corner[0,:] - corner[1,:] #tag inverted on robot
+    # corner = corners[0][0]
+    pos = (corners[0,:] + corners[3,:]) / 2
+    diffs = corners[0,:] - corners[1,:] #tag inverted on robot
     theta = np.arctan2(diffs[1], diffs[0])
     return np.append(pos, theta)
 
@@ -318,7 +321,13 @@ if __name__ == "__main__":
             if SAVEVIDEO:
                 out.write(warped)
             warped_boxed, center_list = track_robots(frame, background, us, opp)
-            self_pose = find_self_pose(warped)
+
+            corners = find_tags(og_frame)
+            if (corners is None) or len(corners) == 0:
+                corners_transformed = None
+            else:
+                corners_transformed = bevTransform.transform_points(corners, pts)
+            self_pose = find_self_pose(warped, corners_transformed)
             # if self_pose_t is None:
             #     self_pose = us.pose #if no tag detected, use last bonding box position
             # else:

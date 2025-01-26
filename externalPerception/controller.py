@@ -24,14 +24,16 @@ class Controller:
         self.frame_w = None
         self.frame_h = None
     
-    def aim_on_opponnent(self):
+    def aim_on_opponnent(self): #pose; X, Y, THETA
         us_to_opp = self.opp.pose[:2] - self.us.pose[:2]
         desired_angle = np.arctan2(us_to_opp[1], us_to_opp[0])
         delta_angle = diff_angles(desired_angle, self.us.pose[2])
         thro = 0
-        steer = cap_input(-delta_angle / 2, 0.6)
+        #pid: 
+        #contorl = p * x + i * int(x) + d * x'
+        steer = cap_input(-delta_angle / 4, 0.5)
         return np.array([thro, steer])
-        pass
+
     def near_walls(self):
         stride = 30
         x,y,th = self.us.pose
@@ -67,7 +69,7 @@ class Controller:
         desired_angle = np.arctan2(us_to_opp[0], us_to_opp[1])
         delta_angle = diff_angles(desired_angle, self.us.pose[2])
         thro = 0.6
-        steer = cap_input(-delta_angle / 3, 0.2)
+        steer = cap_input(-delta_angle / 4, 0.1)
         return np.array([thro, steer])
     
 

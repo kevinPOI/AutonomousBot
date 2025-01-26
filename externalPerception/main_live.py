@@ -20,7 +20,7 @@ from radio import Radio
 print(time.perf_counter() - t0)
 ############################# SETTINGS #############################
 
-CAMERA = 8
+CAMERA = 0
 RECORD = False
 SAVEVIDEO = False
 SAVESUBTRACTION = False
@@ -81,6 +81,7 @@ if __name__ == "__main__":
         if(ret):
             og_frame = bevTransform.pad_image_y(og_frame, 500)
             warped = bevTransform.four_point_transform(og_frame, pts)
+
             foreground_mask = bg_subtractor.apply(warped)
             #frame = cv2.filter2D(warped, -1, gaussian_kernel_2d)
             frame = warped
@@ -107,7 +108,13 @@ if __name__ == "__main__":
             if SAVEVIDEO:
                 out.write(warped)
             warped_boxed, center_list = track_robots(frame, background, us, opp)
-            self_pose = find_self_pose(warped)
+
+            corners = find_tags(og_frame) #find STag corners on original frame, then transform it to bev cordinates
+            if (corners is None) or len(corners) == 0:
+                corners_transformed = None
+            else:
+                corners_transformed = bevTransform.transform_points(corners, pts)
+            self_pose = find_self_pose(warped, corners_transformed)
 
             get_robots_pose(center_list, self_pose, us, opp)
             opp.pose = sim_target
