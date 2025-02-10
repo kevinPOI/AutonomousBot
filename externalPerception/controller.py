@@ -1,4 +1,7 @@
 import numpy as np
+import time 
+import math
+
 def cap_input(input, limit):
     """
     Caps the input value within the range (-limit, limit).
@@ -10,6 +13,7 @@ def cap_input(input, limit):
     Returns:
         float: The capped value.
     """
+    # limits input to [-input, input]
     return max(-limit, min(input, limit))
 
 def diff_angles(angle1, angle2):
@@ -23,16 +27,42 @@ class Controller:
         #set w and h after first warped frame is obtained
         self.frame_w = None
         self.frame_h = None
+        self.update_time = time.time()
+        self.integral = 0
+        self.error = 0
     
     def aim_on_opponnent(self): #pose; X, Y, THETA
+        # us_to_opp = self.opp.pose[:2] - self.us.pose[:2]
+        # desired_angle = np.arctan2(us_to_opp[1], us_to_opp[0])
+        # delta_angle = diff_angles(desired_angle, self.us.pose[2])
+        # thro = 0
+        # #pid: 
+        # #contorl = p * x + i * int(x) + d * x'
+        # steer = cap_input(-delta_angle / 4, 0.5)
+        # return np.array([thro, steer])
+        epsilon = 0.0000001
+        kP = .25
+        kI = .25
+        kD = .25
+
         us_to_opp = self.opp.pose[:2] - self.us.pose[:2]
         desired_angle = np.arctan2(us_to_opp[1], us_to_opp[0])
         delta_angle = diff_angles(desired_angle, self.us.pose[2])
         thro = 0
-        #pid: 
-        #contorl = p * x + i * int(x) + d * x'
-        steer = cap_input(-delta_angle / 4, 0.5)
-        return np.array([thro, steer])
+        # pid: 
+        # steer () = kp * x + ki * int(x) + kd * x'
+        curr_time = time.time()
+        d_time = curr_time - self.update_time
+
+        p = -delta_angle * kP
+        i = kI * -delta_angle * (d_time) + self.integral
+        d = kD * (-delta_angle - self.error) / (d_time + epsilon)
+        steer =  cap_input(p + i + d, 0.5)
+        
+        self.error = -delta_angle
+        self.integral = i
+        self.update_time = curr_time
+        return np.array([thro, steer]) 
 
     def near_walls(self):
         stride = 30
