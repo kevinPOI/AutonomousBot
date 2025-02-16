@@ -62,7 +62,6 @@ class Radio:
         packed_bytes = rand_bytes + bytes(joystick_state) + rand_bytes
         packed_bytes += bytes([sum(packed_bytes) % 256])
         self.radio.write(packed_bytes)
-        print("manual sent: ", joystick_state)
 
     def auton_control(self, control):
         coef = 0.5
@@ -80,16 +79,16 @@ class Radio:
         if sim_mode:
             
             if self.key_states['w']:
-                self.target_pos[1] -= 5
+                self.target_pos[1] -= 10
             elif self.key_states['s']:
-                self.target_pos[1] += 5
+                self.target_pos[1] += 10
             else:
                 pass
 
             if self.key_states['a']:
-                self.target_pos[0] += 5
+                self.target_pos[0] += 10
             elif self.key_states['d']:
-                self.target_pos[0] -= 5
+                self.target_pos[0] -= 10
             else:
                 pass
             return self.target_pos

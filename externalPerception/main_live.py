@@ -20,7 +20,8 @@ from radio import Radio
 print(time.perf_counter() - t0)
 ############################# SETTINGS #############################
 
-CAMERA = 0
+SKIPFRAME = 1
+CAMERA = 4
 RECORD = False
 SAVEVIDEO = False
 SAVESUBTRACTION = False
@@ -41,8 +42,9 @@ if __name__ == "__main__":
     KNN_subtractor = cv2.createBackgroundSubtractorKNN(detectShadows = True) # detectShadows=True : exclude shadow areas from the objects you detected
     bg_subtractor=KNN_subtractor
     camera = cv2.VideoCapture(CAMERA)
-    camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1080)
+    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
     while True:
         arena = Arena()
@@ -78,6 +80,10 @@ if __name__ == "__main__":
     for i in range(int(10e3)):
         t0 = time.perf_counter()
         ret, og_frame = camera.read()
+        t1 = time.perf_counter() - t0
+        print("cam read takes", t1)
+        if i % SKIPFRAME != 0:
+            continue
         if(ret):
             og_frame = bevTransform.pad_image_y(og_frame, 500)
             warped = bevTransform.four_point_transform(og_frame, pts)
@@ -102,14 +108,14 @@ if __name__ == "__main__":
             # Every frame is used both for calculating the foreground mask and for updating the background. 
             else:
                 frame_count += 1
-                background = background_filter(background, frame, 0.01)
+                background = background_filter(background, frame, 0.002)
             if frame_count < skip_till_frame:
                 continue 
             if SAVEVIDEO:
                 out.write(warped)
             warped_boxed, center_list = track_robots(frame, background, us, opp)
 
-            corners = find_tags(og_frame) #find STag corners on original frame, then transform it to bev cordinates
+            corners = find_tags(og_frame, draw = False) #find STag corners on original frame, then transform it to bev cordinates
             if (corners is None) or len(corners) == 0:
                 corners_transformed = None
             else:
@@ -117,13 +123,13 @@ if __name__ == "__main__":
             self_pose = find_self_pose(warped, corners_transformed)
 
             get_robots_pose(center_list, self_pose, us, opp)
-            opp.pose = sim_target
+            #opp.pose = sim_target
             controls = controller.get_controls()
             target = radio.send_control(controls)
             if not (target is None):
                 sim_target = target
             
-            print("controls: ", controls)
+            #print("controls: ", controls)
             draw_robots(warped_boxed, us, opp)
             
             

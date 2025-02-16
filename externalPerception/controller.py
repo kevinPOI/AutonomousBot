@@ -30,20 +30,12 @@ class Controller:
         self.update_time = time.time()
         self.integral = 0
         self.error = 0
+        self.epsilon = 0.0000001
+        self.kP = .4
+        self.kI = .18
+        self.kD = 0.1
     
     def aim_on_opponnent(self): #pose; X, Y, THETA
-        # us_to_opp = self.opp.pose[:2] - self.us.pose[:2]
-        # desired_angle = np.arctan2(us_to_opp[1], us_to_opp[0])
-        # delta_angle = diff_angles(desired_angle, self.us.pose[2])
-        # thro = 0
-        # #pid: 
-        # #contorl = p * x + i * int(x) + d * x'
-        # steer = cap_input(-delta_angle / 4, 0.5)
-        # return np.array([thro, steer])
-        epsilon = 0.0000001
-        kP = .25
-        kI = .25
-        kD = .25
 
         us_to_opp = self.opp.pose[:2] - self.us.pose[:2]
         desired_angle = np.arctan2(us_to_opp[1], us_to_opp[0])
@@ -54,13 +46,13 @@ class Controller:
         curr_time = time.time()
         d_time = curr_time - self.update_time
 
-        p = -delta_angle * kP
-        i = kI * -delta_angle * (d_time) + self.integral
-        d = kD * (-delta_angle - self.error) / (d_time + epsilon)
+        p = -delta_angle * self.kP
+        i = self.kI * -delta_angle * (d_time) + self.integral
+        d = self.kD * (-delta_angle - self.error) / (d_time + self.epsilon)
         steer =  cap_input(p + i + d, 0.5)
         
         self.error = -delta_angle
-        self.integral = i
+        self.integral = cap_input(i, 0.15)
         self.update_time = curr_time
         return np.array([thro, steer]) 
 
@@ -75,8 +67,7 @@ class Controller:
         us_to_opp = self.opp.pose[:2] - self.us.pose[:2]
         desired_angle = np.arctan2(us_to_opp[1], us_to_opp[0])
         delta_angle = diff_angles(desired_angle, self.us.pose[2])
-        print("desired angle: ", desired_angle, "actual ", self.us.pose[2])
-        if abs(delta_angle) < 0.5:
+        if abs(delta_angle) < 0.7:
             return True
         else:
             return False
@@ -87,19 +78,40 @@ class Controller:
         delta_angle = diff_angles(desired_angle, self.us.pose[2])
 
         if abs(delta_angle) < 0.6:#facing center
-            thro = 0.5
+            thro = 0.4
             steer = cap_input(-delta_angle / 2, 0.3)
         else:
             thro = 0
-            steer = cap_input(-delta_angle / 2, 0.3)
+            curr_time = time.time()
+            d_time = curr_time - self.update_time
+
+            p = -delta_angle * self.kP
+            i = self.kI * -delta_angle * (d_time) + self.integral
+            d = self.kD * (-delta_angle - self.error) / (d_time + self.epsilon)
+            steer =  cap_input(p + i + d, 0.5)
+            
+            self.error = -delta_angle
+            self.integral = i
+            self.update_time = curr_time
         return np.array([thro, steer])
     
     def move_towards_opponent(self):
         us_to_opp = self.opp.pose[:2] - self.us.pose[:2]
         desired_angle = np.arctan2(us_to_opp[0], us_to_opp[1])
         delta_angle = diff_angles(desired_angle, self.us.pose[2])
-        thro = 0.6
-        steer = cap_input(-delta_angle / 4, 0.1)
+        thro = 0.5
+
+        curr_time = time.time()
+        d_time = curr_time - self.update_time
+
+        p = 0.5 * -delta_angle * self.kP
+        i = 0 * self.kI * -delta_angle * (d_time) + self.integral
+        d = 0.5 * self.kD * (-delta_angle - self.error) / (d_time + self.epsilon)
+        steer =  cap_input(p + i + d, 0.5)
+        
+        self.error = -delta_angle
+        self.integral = cap_input(i, 0.15)
+        self.update_time = curr_time
         return np.array([thro, steer])
     
 
@@ -114,13 +126,13 @@ class Controller:
         """
         controls = np.array([0.0,0.0])
         if self.near_walls():
-            print("controller: moving away from walls")
+            #print("controller: moving away from walls")
             controls = self.move_away_from_walls()
         else:
             if self.aimed_at_opponent():
-                print("controller: moving towards opponent")
+                #print("controller: moving towards opponent")
                 controls = self.move_towards_opponent()
             else:
-                print("controller: aiming on  opponent")
+                #print("controller: aiming on  opponent")
                 controls = self.aim_on_opponnent()
         return controls

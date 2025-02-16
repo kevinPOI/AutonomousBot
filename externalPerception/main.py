@@ -153,9 +153,9 @@ def track_robots(warped_frame, background, us, opp, out_subtract = None):
 def find_self_pose(frame, corners):
     #corners = find_tags(frame)
     if corners is None:
-        print("\n tag lost \n")
+        print("\n \n tag lost \n\n")
         return None
-    print("corners: ", corners)
+    print("tag ok")
     if len(corners) == 0:
         return None
     if len(corners) > 1:
@@ -222,7 +222,6 @@ def get_robots_pose(center_list, self_pose, us, opp):
     us.filter.update(self_pose_new)
     us.pose = us.filter.get_state()[0:3]
     us.update_time = curr_time
-    print("us pose is: ", us.pose)
 
     opp.filter.predict(DT)
     opp.filter.update(opponent_pose)
