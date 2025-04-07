@@ -120,7 +120,11 @@ if __name__ == "__main__":
                 corners_transformed = None
             else:
                 corners_transformed = bevTransform.transform_points(corners, pts)
+
+            #identifying position of our robot
+            #replace the function with new CNN based
             self_pose = find_self_pose(warped, corners_transformed)
+
 
             get_robots_pose(center_list, self_pose, us, opp)
             #opp.pose = sim_target
